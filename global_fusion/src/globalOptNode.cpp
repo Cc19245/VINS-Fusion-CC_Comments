@@ -11,7 +11,7 @@
 
 #include "ros/ros.h"
 #include "globalOpt.h"
-#include <sensor_msgs/NavSatFix.h>
+#include <sensor_msgs/NavSatFix.h>   //; 和GPS有关的ros传感器消息格式
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
 #include <eigen3/Eigen/Dense>
@@ -24,7 +24,9 @@
 #include <queue>
 #include <mutex>
 
+//; 定义一个全局优化类，其构造函数里会开启一个全局优化的线程
 GlobalOptimization globalEstimator;
+
 ros::Publisher pub_global_odometry, pub_global_path, pub_car;
 nav_msgs::Path *global_path;
 double last_vio_t = -1;
@@ -78,6 +80,8 @@ void GPS_callback(const sensor_msgs::NavSatFixConstPtr &GPS_msg)
     m_buf.unlock();
 }
 
+//; 每收到一个VIO的pose都会把它从localPose转成globalPose并存储起来，然后寻找有没有时间戳对齐的GPS信号
+//;  如果有，就把GPS信号转成笛卡尔坐标系的坐标值并存储起来。最后触发一个全局优化
 void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
 {
     //printf("vio_callback! \n");
@@ -89,13 +93,14 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     vio_q.x() = pose_msg->pose.pose.orientation.x;
     vio_q.y() = pose_msg->pose.pose.orientation.y;
     vio_q.z() = pose_msg->pose.pose.orientation.z;
-    globalEstimator.inputOdom(t, vio_t, vio_q);
+    globalEstimator.inputOdom(t, vio_t, vio_q);  //; 把VIO的localPose转成globalPose并存储起来
 
 
     m_buf.lock();
     // 寻找有没有对应的gps数据
     while(!gpsQueue.empty())
     {
+        //; 注意这个ros的传感器消息格式
         sensor_msgs::NavSatFixConstPtr GPS_msg = gpsQueue.front();
         double gps_t = GPS_msg->header.stamp.toSec();
         printf("vio t: %f, gps t: %f \n", t, gps_t);
@@ -104,17 +109,19 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
         if(gps_t >= t - 0.01 && gps_t <= t + 0.01)
         {
             //printf("receive GPS with timestamp %f\n", GPS_msg->header.stamp.toSec());
-            double latitude = GPS_msg->latitude;
-            double longitude = GPS_msg->longitude;
-            double altitude = GPS_msg->altitude;
+            double latitude = GPS_msg->latitude;    //; 纬度
+            double longitude = GPS_msg->longitude;  //; 经度
+            double altitude = GPS_msg->altitude;    //; 高度
             //int numSats = GPS_msg->status.service;
-            double pos_accuracy = GPS_msg->position_covariance[0];
+            double pos_accuracy = GPS_msg->position_covariance[0];  //; GPS数据的协方差
+            //! 下面的判断不知道什么意思？
             if(pos_accuracy <= 0)
                 pos_accuracy = 1;
             //printf("receive covariance %lf \n", pos_accuracy);
             //if(GPS_msg->status.status > 8)
             // 这里时间戳就不用GPS的时间戳，而是采用VIO的时间戳
-                globalEstimator.inputGPS(t, latitude, longitude, altitude, pos_accuracy);
+            //; 这里加入GPS数据后，就会触发一次全局优化
+            globalEstimator.inputGPS(t, latitude, longitude, altitude, pos_accuracy);
             gpsQueue.pop();
             break;
         }
@@ -127,7 +134,7 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
 
     Eigen::Vector3d global_t;
     Eigen:: Quaterniond global_q;
-    globalEstimator.getGlobalOdom(global_t, global_q);
+    globalEstimator.getGlobalOdom(global_t, global_q);  //; 读取最新的VIO位姿转到全局系下的globalPose
 
     nav_msgs::Odometry odometry;
     odometry.header = pose_msg->header;
@@ -140,8 +147,10 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     odometry.pose.pose.orientation.y = global_q.y();
     odometry.pose.pose.orientation.z = global_q.z();
     odometry.pose.pose.orientation.w = global_q.w();
-    pub_global_odometry.publish(odometry);
-    pub_global_path.publish(*global_path);
+    pub_global_odometry.publish(odometry);   //; odometry是最新的VIO位姿转到全局系下的globalPose
+    pub_global_path.publish(*global_path);   //; global_path是进行全局优化后的所有的globalPose位姿
+
+    //; 向rivz发布一个小车的模型，看起来更好看
     publish_car_model(t, global_t, global_q);
 
 
@@ -170,6 +179,8 @@ int main(int argc, char **argv)
 
     ros::Subscriber sub_GPS = n.subscribe("/gps", 100, GPS_callback);
     ros::Subscriber sub_vio = n.subscribe("/vins_estimator/odometry", 100, vio_callback);
+
+    //; 注意看一下下面两个消息，Path和Odometry消息有什么区别
     pub_global_path = n.advertise<nav_msgs::Path>("global_path", 100);
     pub_global_odometry = n.advertise<nav_msgs::Odometry>("global_odometry", 100);
     pub_car = n.advertise<visualization_msgs::MarkerArray>("car_model", 1000);

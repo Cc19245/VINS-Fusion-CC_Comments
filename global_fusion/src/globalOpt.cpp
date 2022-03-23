@@ -38,20 +38,25 @@ void GlobalOptimization::GPS2XYZ(double latitude, double longitude, double altit
     //printf("gps x: %f y: %f z: %f\n", xyz[0], xyz[1], xyz[2]);
 }
 
+//; 把VIO发来的localPose转成globalPose并存储起来
 void GlobalOptimization::inputOdom(double t, Eigen::Vector3d OdomP, Eigen::Quaterniond OdomQ)
 {
 	mPoseMap.lock();
+    //; 这里的localPose就是前端VIO发来的位姿
     vector<double> localPose{OdomP.x(), OdomP.y(), OdomP.z(), 
     					     OdomQ.w(), OdomQ.x(), OdomQ.y(), OdomQ.z()};
     localPoseMap[t] = localPose;
 
     // 将VIO的local pose转成global pose
     Eigen::Quaterniond globalQ;
+    //; WGPS_T_WVIO是VIO系到global系的坐标变换矩阵，这里就是把localPose转成globalPose
     globalQ = WGPS_T_WVIO.block<3, 3>(0, 0) * OdomQ;
     Eigen::Vector3d globalP = WGPS_T_WVIO.block<3, 3>(0, 0) * OdomP + WGPS_T_WVIO.block<3, 1>(0, 3);
     vector<double> globalPose{globalP.x(), globalP.y(), globalP.z(),
                               globalQ.w(), globalQ.x(), globalQ.y(), globalQ.z()};
     globalPoseMap[t] = globalPose;
+
+    //; 更新类成员变量，得到最新的gloablPose
     lastP = globalP;
     lastQ = globalQ;
 
@@ -81,14 +86,16 @@ void GlobalOptimization::inputGPS(double t, double latitude, double longitude, d
 {
 	double xyz[3];
     // 把经纬度转到局部笛卡尔坐标系
+    //; 注意这个函数是调用了LocalCartesian的第三方库，基本做法就是把第一帧GPS信号所在位置作为笛卡尔坐标系的参考坐标系，
+    //;  然后后面的数据根据相对第一帧GPS的经纬度、高度差转成相对第一帧GPS的笛卡尔坐标系值
 	GPS2XYZ(latitude, longitude, altitude, xyz);
 	vector<double> tmp{xyz[0], xyz[1], xyz[2], posAccuracy};
     //printf("new gps: t: %f x: %f y: %f z:%f \n", t, tmp[0], tmp[1], tmp[2]);
-	GPSPositionMap[t] = tmp;
-    newGPS = true;
-
+	GPSPositionMap[t] = tmp;  //; 注意这里的时间戳t传入的是VIO的时间，而不是gps的时间
+    newGPS = true;    //; 置位标志位，这将会触发全局优化线程，开始一个全局优化
 }
 
+//; 融合gps进行全局优化的线程
 void GlobalOptimization::optimize()
 {
     while(true)
@@ -108,18 +115,19 @@ void GlobalOptimization::optimize()
             options.max_num_iterations = 5;
             ceres::Solver::Summary summary;
             ceres::LossFunction *loss_function;
-            loss_function = new ceres::HuberLoss(1.0);
+            loss_function = new ceres::HuberLoss(1.0);  //; 给GPS的测量结果加了一个鲁棒核函数
             ceres::LocalParameterization* local_parameterization = new ceres::QuaternionParameterization();
 
             //add param
             mPoseMap.lock();
-            int length = localPoseMap.size();
+            int length = localPoseMap.size();   //; 一帧GPS信号到来之前有多个VIO位姿
             // w^t_i   w^q_i
             double t_array[length][3];
             double q_array[length][4];
             map<double, vector<double>>::iterator iter;
-            iter = globalPoseMap.begin();
+            iter = globalPoseMap.begin();  //; 注意这里遍历的是globalPose
             // 遍历的取出VIO位姿
+            // Step 1 遍历globalPose添加参数
             for (int i = 0; i < length; i++, iter++)
             {
                 t_array[i][0] = iter->second[0];
@@ -136,14 +144,15 @@ void GlobalOptimization::optimize()
 
             map<double, vector<double>>::iterator iterVIO, iterVIONext, iterGPS;
             int i = 0;
+            // Step 2 遍历localPose，利用帧间约束添加对globalPose的约束
             for (iterVIO = localPoseMap.begin(); iterVIO != localPoseMap.end(); iterVIO++, i++)
             {
                 //vio factor
                 iterVIONext = iterVIO;
-                iterVIONext++;
+                iterVIONext++;  //; 这里++之后就得到了下一帧的位姿
                 if(iterVIONext != localPoseMap.end())
                 {
-                    // 根据VIO提供的局部坐标系位姿计算出每两帧之间的delta pose
+                    // 根据VIO提供的局部(local)坐标系位姿计算出每两帧之间的delta pose
                     Eigen::Matrix4d wTi = Eigen::Matrix4d::Identity();
                     Eigen::Matrix4d wTj = Eigen::Matrix4d::Identity();
                     wTi.block<3, 3>(0, 0) = Eigen::Quaterniond(iterVIO->second[3], iterVIO->second[4], 
@@ -156,11 +165,12 @@ void GlobalOptimization::optimize()
                     Eigen::Matrix4d iTj = wTi.inverse() * wTj;
                     Eigen::Quaterniond iQj;
                     iQj = iTj.block<3, 3>(0, 0);
-                    Eigen::Vector3d iPj = iTj.block<3, 1>(0, 3);
+                    Eigen::Vector3d iPj = iTj.block<3, 1>(0, 3);  //; i和j的相对平移，注意是在local系下的
                     // 帧间约束的构建
                     ceres::CostFunction* vio_function = RelativeRTError::Create(iPj.x(), iPj.y(), iPj.z(),
                                                                                 iQj.w(), iQj.x(), iQj.y(), iQj.z(),
                                                                                 0.1, 0.01);
+                    //; 注意传入的优化参数，是当前帧和下一帧的globalPose
                     problem.AddResidualBlock(vio_function, NULL, q_array[i], t_array[i], q_array[i+1], t_array[i+1]);
 
                     /*
@@ -192,6 +202,7 @@ void GlobalOptimization::optimize()
 
                 }
                 //gps factor
+                // Step 3 查看是否有GPS的约束，如果有则添加
                 double t = iterVIO->first;
                 iterGPS = GPSPositionMap.find(t);
                 if (iterGPS != GPSPositionMap.end())
@@ -226,6 +237,7 @@ void GlobalOptimization::optimize()
             // update global pose
             //mPoseMap.lock();
             iter = globalPoseMap.begin();
+            // Step 4 优化结束后对globalPose进行更新，主要是把double数组中的数更新到vector中
             // 位姿更正
             for (int i = 0; i < length; i++, iter++)
             {
@@ -234,6 +246,7 @@ void GlobalOptimization::optimize()
             							  q_array[i][0], q_array[i][1], q_array[i][2], q_array[i][3]};
             	iter->second = globalPose;
                 // 计算出最新的VIO位姿到全局位姿的转换关系
+                //; 注意这里为什么使用length-1这个位姿，因为想计算最新的VIO位姿到全局位姿的变换关系
             	if(i == length - 1)
             	{
             	    Eigen::Matrix4d WVIO_T_body = Eigen::Matrix4d::Identity(); 
@@ -245,7 +258,7 @@ void GlobalOptimization::optimize()
             	    WGPS_T_body.block<3, 3>(0, 0) = Eigen::Quaterniond(globalPose[3], globalPose[4], 
             	                                                        globalPose[5], globalPose[6]).toRotationMatrix();
             	    WGPS_T_body.block<3, 1>(0, 3) = Eigen::Vector3d(globalPose[0], globalPose[1], globalPose[2]);
-            	    WGPS_T_WVIO = WGPS_T_body * WVIO_T_body.inverse();
+            	    WGPS_T_WVIO = WGPS_T_body * WVIO_T_body.inverse();  //; 得到最新的local到global的变换关系
             	}
             }
             updateGlobalPath();
@@ -258,7 +271,7 @@ void GlobalOptimization::optimize()
 	return;
 }
 
-
+//; 跟新global path，应该是给rviz可视化使用的
 void GlobalOptimization::updateGlobalPath()
 {
     global_path.poses.clear();

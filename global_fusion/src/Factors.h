@@ -25,6 +25,7 @@ void QuaternionInverse(const T q[4], T q_inverse[4])
 
 struct TError
 {
+	//; 形参：GPS测量的x y z 坐标和标准差
 	TError(double t_x, double t_y, double t_z, double var)
 				  :t_x(t_x), t_y(t_y), t_z(t_z), var(var){}
 
@@ -51,9 +52,10 @@ struct TError
 
 struct RelativeRTError
 {
-	RelativeRTError(double t_x, double t_y, double t_z, 
-					double q_w, double q_x, double q_y, double q_z,
-					double t_var, double q_var)
+
+	RelativeRTError(double t_x, double t_y, double t_z,   //; VIO计算得到的两帧之间的相对平移（测量值）
+					double q_w, double q_x, double q_y, double q_z,   //; VIO计算得到的两帧之间的相对旋转（测量值）
+					double t_var, double q_var)  //; VIO计算得到的两帧的相对平移和相对旋转的标准差
 				  :t_x(t_x), t_y(t_y), t_z(t_z), 
 				   q_w(q_w), q_x(q_x), q_y(q_y), q_z(q_z),
 				   t_var(t_var), q_var(q_var){}
@@ -76,6 +78,8 @@ struct RelativeRTError
 		// 将相对平移转到第i帧坐标系下
 		ceres::QuaternionRotatePoint(i_q_w, t_w_ij, t_i_ij);
 
+		//; 平移部分的残差，因为ceres没有信息矩阵，所以只能把协方差部分直接在这里进行除法操作
+		//; t_i_ij是由位姿得到的计算值，t_x是由VIO传来的测量值
 		residuals[0] = (t_i_ij[0] - T(t_x)) / T(t_var);
 		residuals[1] = (t_i_ij[1] - T(t_y)) / T(t_var);
 		residuals[2] = (t_i_ij[2] - T(t_z)) / T(t_var);
@@ -110,6 +114,7 @@ struct RelativeRTError
 									   const double t_var, const double q_var) 
 	{
 	  return (new ceres::AutoDiffCostFunction<
+	  		  //; 残差维度，参数块1维度，参数块2维度，参数块3维度，参数块4维度
 	          RelativeRTError, 6, 4, 3, 4, 3>(
 	          	new RelativeRTError(t_x, t_y, t_z, q_w, q_x, q_y, q_z, t_var, q_var)));
 	}

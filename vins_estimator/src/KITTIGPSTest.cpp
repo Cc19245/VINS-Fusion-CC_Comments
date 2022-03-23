@@ -8,7 +8,7 @@
  *
  * Author: Qin Tong (qintonguav@gmail.com)
  *******************************************************/
-//; 
+
 #include <iostream>
 #include <stdio.h>
 #include <cmath>
