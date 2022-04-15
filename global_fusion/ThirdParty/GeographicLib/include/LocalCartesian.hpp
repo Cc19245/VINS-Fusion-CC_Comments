@@ -40,7 +40,7 @@ namespace GeographicLib {
     typedef Math::real real;
     static const size_t dim_ = 3;
     static const size_t dim2_ = dim_ * dim_;
-    Geocentric _earth;
+    Geocentric _earth;   //; Geocentric ： 地心
     real _lat0, _lon0, _h0;
     real _x0, _y0, _z0, _r[dim2_];
     void IntForward(real lat, real lon, real h, real& x, real& y, real& z,
@@ -90,16 +90,18 @@ namespace GeographicLib {
     void Reset(real lat0, real lon0, real h0 = 0);
 
     /**
+     * 从大地坐标转换为局部笛卡尔坐标
      * Convert from geodetic to local cartesian coordinates.
      *
-     * @param[in] lat latitude of point (degrees).
-     * @param[in] lon longitude of point (degrees).
-     * @param[in] h height of point above the ellipsoid (meters).
+     * @param[in] lat latitude of point (degrees).   维度
+     * @param[in] lon longitude of point (degrees).  经度
+     * @param[in] h height of point above the ellipsoid (meters).  椭球上方点的高度
      * @param[out] x local cartesian coordinate (meters).
      * @param[out] y local cartesian coordinate (meters).
      * @param[out] z local cartesian coordinate (meters).
      *
      * \e lat should be in the range [&minus;90&deg;, 90&deg;].
+     * 这个函数里面的real是重定义的数据类型，一般都是double
      **********************************************************************/
     void Forward(real lat, real lon, real h, real& x, real& y, real& z)
       const {

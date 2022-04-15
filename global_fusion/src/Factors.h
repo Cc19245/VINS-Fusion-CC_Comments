@@ -30,6 +30,7 @@ struct TError
 				  :t_x(t_x), t_y(t_y), t_z(t_z), var(var){}
 
 	template <typename T>
+	//; 优化参数：globalPose下的位置；  最后一个参数是残差
 	bool operator()(const T* tj, T* residuals) const
 	{
 		residuals[0] = (tj[0] - T(t_x)) / T(var);
@@ -41,6 +42,7 @@ struct TError
 
 	static ceres::CostFunction* Create(const double t_x, const double t_y, const double t_z, const double var) 
 	{
+	  //; 自动求导
 	  return (new ceres::AutoDiffCostFunction<
 	          TError, 3, 3>(
 	          	new TError(t_x, t_y, t_z, var)));
@@ -61,21 +63,24 @@ struct RelativeRTError
 				   t_var(t_var), q_var(q_var){}
 
 	// 使用了ceres自动求导，那么只需要定义残差的计算方式
+	//; 前4个参数是要优化的参数，最后一个参数是残差
 	template <typename T>
 	bool operator()(const T* const w_q_i, const T* ti, const T* w_q_j, const T* tj, T* residuals) const
 	{
 		T t_w_ij[3];
 		// 世界坐标系下i帧和j帧的相对平移
+		//; 也就是说，下面计算的是golbalPose下的位姿的相对平移，在globalPose下的表示
 		t_w_ij[0] = tj[0] - ti[0];
 		t_w_ij[1] = tj[1] - ti[1];
 		t_w_ij[2] = tj[2] - ti[2];
 
 		T i_q_w[4];
-		// 将四元数取逆
+		// 将四元数取逆，实部不变，虚部取相反数即可
 		QuaternionInverse(w_q_i, i_q_w);
 
 		T t_i_ij[3];
 		// 将相对平移转到第i帧坐标系下
+		//; 这里需要将在globalPose下表示的相对平移，转换到第i帧下表示的相对平移
 		ceres::QuaternionRotatePoint(i_q_w, t_w_ij, t_i_ij);
 
 		//; 平移部分的残差，因为ceres没有信息矩阵，所以只能把协方差部分直接在这里进行除法操作
@@ -92,6 +97,7 @@ struct RelativeRTError
 
 		T q_i_j[4];
 		// 计算出两帧的相对旋转
+		//; q_i_j是用globalPose中的相邻两帧的姿态计算出来的相对姿态
 		ceres::QuaternionProduct(i_q_w, w_q_j, q_i_j);
 
 		T relative_q_inv[4];

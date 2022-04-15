@@ -9,15 +9,17 @@
 
 #include "LocalCartesian.hpp"
 
+
 namespace GeographicLib {
 
   using namespace std;
 
   void LocalCartesian::Reset(real lat0, real lon0, real h0) {
-    _lat0 = Math::LatFix(lat0);
-    _lon0 = Math::AngNormalize(lon0);
-    _h0 = h0;
-    _earth.Forward(_lat0, _lon0, _h0, _x0, _y0, _z0);
+    _lat0 = Math::LatFix(lat0);   //; 纬度范围控制在-90 ~ +90之间
+    _lon0 = Math::AngNormalize(lon0);  //; 经度范围控制在 -180 ~ +180之间
+    _h0 = h0;  //; 海拔高度
+
+    _earth.Forward(_lat0, _lon0, _h0, _x0, _y0, _z0);  //; 调用地心类的forward函数
     real sphi, cphi, slam, clam;
     Math::sincosd(_lat0, sphi, cphi);
     Math::sincosd(_lon0, slam, clam);

@@ -14,9 +14,11 @@
 
 GlobalOptimization::GlobalOptimization()
 {
-	initGPS = false;
+    //; 是否收到第一帧和VIO位姿时间戳对齐的GPS消息的标志。注意并不是第一帧GPS消息的标志！
+	initGPS = false;   
+    //; 是否进行全局优化的标志
     newGPS = false;
-	WGPS_T_WVIO = Eigen::Matrix4d::Identity();、
+	WGPS_T_WVIO = Eigen::Matrix4d::Identity();
     // 后台始终运行了一个优化的线程
     threadOpt = std::thread(&GlobalOptimization::optimize, this);
 }
@@ -89,6 +91,8 @@ void GlobalOptimization::inputGPS(double t, double latitude, double longitude, d
     //; 注意这个函数是调用了LocalCartesian的第三方库，基本做法就是把第一帧GPS信号所在位置作为笛卡尔坐标系的参考坐标系，
     //;  然后后面的数据根据相对第一帧GPS的经纬度、高度差转成相对第一帧GPS的笛卡尔坐标系值
 	GPS2XYZ(latitude, longitude, altitude, xyz);
+
+    //; 这里有点问题吧？如果是第一帧的GPS数据，那么并没有赋值xyz, 这个时候xyz是什么数？
 	vector<double> tmp{xyz[0], xyz[1], xyz[2], posAccuracy};
     //printf("new gps: t: %f x: %f y: %f z:%f \n", t, tmp[0], tmp[1], tmp[2]);
 	GPSPositionMap[t] = tmp;  //; 注意这里的时间戳t传入的是VIO的时间，而不是gps的时间
@@ -126,6 +130,7 @@ void GlobalOptimization::optimize()
             double q_array[length][4];
             map<double, vector<double>>::iterator iter;
             iter = globalPoseMap.begin();  //; 注意这里遍历的是globalPose
+
             // 遍历的取出VIO位姿
             // Step 1 遍历globalPose添加参数
             for (int i = 0; i < length; i++, iter++)
@@ -144,6 +149,7 @@ void GlobalOptimization::optimize()
 
             map<double, vector<double>>::iterator iterVIO, iterVIONext, iterGPS;
             int i = 0;
+
             // Step 2 遍历localPose，利用帧间约束添加对globalPose的约束
             for (iterVIO = localPoseMap.begin(); iterVIO != localPoseMap.end(); iterVIO++, i++)
             {
@@ -161,12 +167,15 @@ void GlobalOptimization::optimize()
                     wTj.block<3, 3>(0, 0) = Eigen::Quaterniond(iterVIONext->second[3], iterVIONext->second[4], 
                                                                iterVIONext->second[5], iterVIONext->second[6]).toRotationMatrix();
                     wTj.block<3, 1>(0, 3) = Eigen::Vector3d(iterVIONext->second[0], iterVIONext->second[1], iterVIONext->second[2]);
+                   
                     // 得到相对pose
                     Eigen::Matrix4d iTj = wTi.inverse() * wTj;
                     Eigen::Quaterniond iQj;
-                    iQj = iTj.block<3, 3>(0, 0);
-                    Eigen::Vector3d iPj = iTj.block<3, 1>(0, 3);  //; i和j的相对平移，注意是在local系下的
+                    iQj = iTj.block<3, 3>(0, 0);  //; 旋转矩阵转四元数
+                    Eigen::Vector3d iPj = iTj.block<3, 1>(0, 3);  //; i和j的相对平移，注意是在i系下表示的
+                   
                     // 帧间约束的构建
+                    //; 注意最后的两个标准差应该是根据经验来设置的，设置成了常量
                     ceres::CostFunction* vio_function = RelativeRTError::Create(iPj.x(), iPj.y(), iPj.z(),
                                                                                 iQj.w(), iQj.x(), iQj.y(), iQj.z(),
                                                                                 0.1, 0.01);
@@ -239,12 +248,14 @@ void GlobalOptimization::optimize()
             iter = globalPoseMap.begin();
             // Step 4 优化结束后对globalPose进行更新，主要是把double数组中的数更新到vector中
             // 位姿更正
+            //; length是localPose.size, 其实也是gloalPose.size
             for (int i = 0; i < length; i++, iter++)
             {
             	// 优化后的和gps拉齐的位姿
                 vector<double> globalPose{t_array[i][0], t_array[i][1], t_array[i][2],
             							  q_array[i][0], q_array[i][1], q_array[i][2], q_array[i][3]};
-            	iter->second = globalPose;
+            	iter->second = globalPose;  //; 这里赋值了，也就是更新为优化之后的参数
+
                 // 计算出最新的VIO位姿到全局位姿的转换关系
                 //; 注意这里为什么使用length-1这个位姿，因为想计算最新的VIO位姿到全局位姿的变换关系
             	if(i == length - 1)
@@ -265,7 +276,7 @@ void GlobalOptimization::optimize()
             //printf("global time %f \n", globalOptimizationTime.toc());
             mPoseMap.unlock();
         }
-        std::chrono::milliseconds dura(2000);
+        std::chrono::milliseconds dura(2000);  //; 2s 才会进行一次融合GPS的位姿图优化
         std::this_thread::sleep_for(dura);
     }
 	return;

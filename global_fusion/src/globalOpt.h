@@ -48,7 +48,7 @@ private:
 	bool newGPS;
 	GeographicLib::LocalCartesian geoConverter;
 	std::mutex mPoseMap;
-	Eigen::Matrix4d WGPS_T_WVIO;
+	Eigen::Matrix4d WGPS_T_WVIO;  //; VIO位姿到global位姿的转换
 	Eigen::Vector3d lastP;
 	Eigen::Quaterniond lastQ;
 	std::thread threadOpt;
