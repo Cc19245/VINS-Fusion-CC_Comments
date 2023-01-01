@@ -43,6 +43,7 @@ namespace GeographicLib {
     Geocentric _earth;   //; Geocentric ： 地心
     real _lat0, _lon0, _h0;
     real _x0, _y0, _z0, _r[dim2_];
+    
     void IntForward(real lat, real lon, real h, real& x, real& y, real& z,
                     real M[dim2_]) const;
     void IntReverse(real x, real y, real z, real& lat, real& lon, real& h,

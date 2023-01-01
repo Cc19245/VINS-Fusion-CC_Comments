@@ -1,8 +1,25 @@
-VINS-Mono注释详见https://github.com/xieqi1/VINS-Mono-noted
+# VINS-Fusion-CC_Comments
 
-本仓库只对双目部分及其他和VINS-Mono不同的部分进行注释
+## Introduction
 
-如果你喜欢可以star一下～～～
+本仓库是 [VINS-Fusion](https://github.com/HKUST-Aerial-Robotics/VINS-Fusion) 的中文注释版本。本仓库只对双目部分及其他和 [VINS-Mono](https://github.com/HKUST-Aerial-Robotics/VINS-Fusion) 不同的部分进行注释，关于 VINS-Mono 的详细中文注释，在我的另一个仓库中：[VINS-Mono-CC_Comments](https://github.com/Cc19245/VINS-Mono-CC_Comments)
+
+## Done 
+
+- 详细看完GPS融合的`global_fusion`节点代码并注释
+
+## TODO
+
+- [ ] 过一遍整体代码框架，进行简略注释
+
+## Acknowledgements
+
+- [VINS-Fusion-noted](https://github.com/xieqi1/VINS-Fusion-noted)
+- [VINS-Fusion](https://github.com/HKUST-Aerial-Robotics/VINS-Fusion)
+
+
+
+---
 
 # VINS-Fusion
 

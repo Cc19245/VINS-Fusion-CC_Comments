@@ -86,7 +86,7 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
 {
     //printf("vio_callback! \n");
     double t = pose_msg->header.stamp.toSec();
-    last_vio_t = t;
+    last_vio_t = t;  //; 这个变量没用
     Eigen::Vector3d vio_t(pose_msg->pose.pose.position.x, pose_msg->pose.pose.position.y, pose_msg->pose.pose.position.z);
     Eigen::Quaterniond vio_q;
     vio_q.w() = pose_msg->pose.pose.orientation.w;
@@ -103,7 +103,8 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
         //; 注意这个ros的传感器消息格式
         sensor_msgs::NavSatFixConstPtr GPS_msg = gpsQueue.front();
         double gps_t = GPS_msg->header.stamp.toSec();
-        //; 这个地方跑github上的kitti数据集，可以看到结果是GPS的数据为10HZ，然后GPS和VIO的时间戳进行了对齐
+        //; 这个地方跑github上的kitti数据集，可以看到结果是GPS的数据为10HZ，然后GPS和VIO的时间戳进行了对齐，
+        //; 
         printf("vio t: %f, gps t: %f \n", t, gps_t);
         // 10ms sync tolerance
         // 某个VIO位姿的时间距离GPS时间差在10ms之内，就认为找到了同步的GPS信号

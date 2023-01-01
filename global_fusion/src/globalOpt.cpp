@@ -270,7 +270,8 @@ void GlobalOptimization::optimize()
             	                                                        globalPose[5], globalPose[6]).toRotationMatrix();
             	    WGPS_T_body.block<3, 1>(0, 3) = Eigen::Vector3d(globalPose[0], globalPose[1], globalPose[2]);
             	    WGPS_T_WVIO = WGPS_T_body * WVIO_T_body.inverse();  //; 得到最新的local到global的变换关系
-            	}
+            	
+                }
             }
             updateGlobalPath();
             //printf("global time %f \n", globalOptimizationTime.toc());

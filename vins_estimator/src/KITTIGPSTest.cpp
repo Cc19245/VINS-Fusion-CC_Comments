@@ -50,6 +50,7 @@ int main(int argc, char** argv)
 	string dataPath = sequence + "/";
 
 	// load image list
+	//; 图像10HZ
 	FILE* file;
 	file = std::fopen((dataPath + "image_00/timestamps.txt").c_str() , "r");
 	if(file == NULL){

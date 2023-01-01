@@ -20,6 +20,7 @@ namespace GeographicLib {
     _h0 = h0;  //; 海拔高度
 
     _earth.Forward(_lat0, _lon0, _h0, _x0, _y0, _z0);  //; 调用地心类的forward函数
+
     real sphi, cphi, slam, clam;
     Math::sincosd(_lat0, sphi, cphi);
     Math::sincosd(_lon0, slam, clam);
@@ -41,6 +42,7 @@ namespace GeographicLib {
                                   real M[dim2_]) const {
     real xc, yc, zc;
     _earth.IntForward(lat, lon, h, xc, yc, zc, M);
+    
     xc -= _x0; yc -= _y0; zc -= _z0;
     x = _r[0] * xc + _r[3] * yc + _r[6] * zc;
     y = _r[1] * xc + _r[4] * yc + _r[7] * zc;
